@@ -377,13 +377,13 @@ export default function ShiftPage() {
         </div>
       ) : (
         <>
-          {/* ── スマホビュー ── */}
-          <div className="md:hidden">
+           {/* ── スマホビュー ── */}
+          <div className="md:hidden mobile-view">
             {mobileView === 'staff' ? <MobileStaffView /> : <MobileDayView />}
           </div>
 
           {/* ── PCビュー ── */}
-          <div className="hidden md:block">
+          <div className="hidden md:block pc-view">
             {/* 凡例 */}
             <div className="flex gap-2 flex-wrap mb-3 text-xs items-center no-print">
               {(['A','B','C','D','E1','E2','全休','午前半休'] as const).map(pos => (

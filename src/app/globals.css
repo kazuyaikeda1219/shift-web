@@ -3,13 +3,16 @@
 @tailwind utilities;
 
 @media print {
-  /* ナビ・ボタン類を非表示 */
   nav,
-  .no-print {
+  .no-print,
+  .mobile-view {
     display: none !important;
   }
 
-  /* A4横 */
+  .pc-view {
+    display: block !important;
+  }
+
   @page {
     size: A4 landscape;
     margin: 8mm;
@@ -20,7 +23,6 @@
     background: white;
   }
 
-  /* テーブルをページ幅に収める */
   .overflow-x-auto {
     overflow: visible !important;
   }
@@ -37,12 +39,10 @@
     word-break: break-all;
   }
 
-  /* スタッフ名列 */
   .sticky {
     position: static !important;
   }
 
-  /* 集計テーブル・余白 */
   .mt-6 {
     margin-top: 8px !important;
   }
