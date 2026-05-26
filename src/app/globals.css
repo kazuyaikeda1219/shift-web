@@ -1,3 +1,49 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@media print {
+  /* ナビ・ボタン類を非表示 */
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  /* A4横 */
+  @page {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  body {
+    font-size: 9px;
+    background: white;
+  }
+
+  /* テーブルをページ幅に収める */
+  .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  table {
+    width: 100% !important;
+    table-layout: fixed;
+    font-size: 8px;
+  }
+
+  th, td {
+    min-width: unset !important;
+    padding: 2px 3px !important;
+    word-break: break-all;
+  }
+
+  /* スタッフ名列 */
+  .sticky {
+    position: static !important;
+  }
+
+  /* 集計テーブル・余白 */
+  .mt-6 {
+    margin-top: 8px !important;
+  }
+}

@@ -197,7 +197,7 @@ export default function ShiftPage() {
   return (
     <div className="max-w-full">
       {/* ヘッダ */}
-      <div className="flex items-center gap-4 mb-4 flex-wrap">
+      <div className="flex items-center gap-4 mb-4 flex-wrap no-print">
         <div className="flex items-center gap-2">
           <select value={year} onChange={e => setYear(Number(e.target.value))}
             className="border border-slate-200 rounded px-2 py-1 text-sm">
@@ -218,6 +218,12 @@ export default function ShiftPage() {
         <button onClick={handleReset}
           className="bg-red-400 hover:bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium">
           🗑 シフトをリセット
+        </button>
+        <button
+          onClick={() => window.print()}
+          className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-1.5 rounded text-sm font-medium"
+        >
+          🖨 印刷／PDF保存
         </button>
       </div>
 
