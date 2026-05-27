@@ -152,11 +152,16 @@ export function generateMonth(
   const posCount: Record<StaffId, Record<string, number>> = {}
   const heavyECount: Record<StaffId, number> = {}
   const e1Count: Record<StaffId, number> = {}
+  // ★なしの火木金土でのC配置カウント
+  const nonUsCLightCount: Record<StaffId, number> = {}
   for (const sid of staffIds) {
     posCount[sid] = {}
     heavyECount[sid] = 0
     e1Count[sid] = 0
+    nonUsCLightCount[sid] = 0
   }
+  const nonUsStaff = staffIds.filter(s => !usStaff.has(s))
+  const lightDays = ['火', '木', '金', '土']
 
   const daysInMonth = new Date(year, month, 0).getDate()
 
@@ -293,12 +298,21 @@ export function generateMonth(
         if (pos === 'C' && (wd === '月' || wd === '水')) {
           cands = cands.filter(s => !usStaff.has(s))
         }
+        // 火木金土：★なしでまだ軽い日のCに入っていない人を優先
+        if (pos === 'C' && lightDays.includes(wd)) {
+          const notYetC = cands.filter(s => !usStaff.has(s) && nonUsCLightCount[s] === 0)
+          if (notYetC.length > 0) cands = notYetC
+        }
         const picked = pickOne(cands, assigned, prevPos, posCount, heavyECount, isHeavy, false, pos)
         if (picked) {
           assignment[picked] = pos as Position
           assigned.add(picked)
           posCount[picked][pos] = (posCount[picked][pos] ?? 0) + 1
           prevPos[picked] = pos
+          // 火木金土のC配置カウント更新
+          if (pos === 'C' && lightDays.includes(wd) && !usStaff.has(picked)) {
+            nonUsCLightCount[picked] = (nonUsCLightCount[picked] ?? 0) + 1
+          }
         } else {
           warnings.push(`${dateStr} (${pos})：割り当て可能なスタッフ不足`)
         }
@@ -430,6 +444,12 @@ export function generateMonth(
       saturday_pm: saturdayPm,
     })
   }
-
+// ★なしで火木金土のCが0回の人に警告
+  for (const sid of nonUsStaff) {
+    if (nonUsCLightCount[sid] === 0) {
+      const name = staffList.find(s => s.id === sid)?.name ?? sid
+      warnings.push(`${name}：火・木・金・土曜のC配置が0回です`)
+    }
+  }
   return { result, warnings }
 }
