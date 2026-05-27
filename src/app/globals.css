@@ -15,12 +15,14 @@
 
   @page {
     size: A4 landscape;
-    margin: 8mm;
+    margin: 6mm;
   }
 
   body {
-    font-size: 9px;
+    font-size: 8px;
     background: white;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
   .overflow-x-auto {
@@ -30,13 +32,14 @@
   table {
     width: 100% !important;
     table-layout: fixed;
-    font-size: 8px;
+    font-size: 7px;
   }
 
   th, td {
     min-width: unset !important;
-    padding: 2px 3px !important;
+    padding: 2px 2px !important;
     word-break: break-all;
+    overflow: hidden;
   }
 
   .sticky {
@@ -44,6 +47,40 @@
   }
 
   .mt-6 {
-    margin-top: 8px !important;
+    margin-top: 6px !important;
+  }
+
+  /* 背景色を印刷時に強制適用 */
+  [class*="bg-orange"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  [class*="bg-teal"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  [class*="bg-blue"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  [class*="bg-green"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  [class*="bg-yellow"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  [class*="bg-purple"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  [class*="bg-pink"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  [class*="bg-slate"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
