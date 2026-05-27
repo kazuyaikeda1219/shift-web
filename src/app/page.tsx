@@ -98,6 +98,7 @@ export default function ShiftPage() {
   const [editCell,   setEditCell]   = useState<{date:string;sid:string;pos:string}|null>(null)
   const [editViol,   setEditViol]   = useState<string[]>([])
   const [editPos,    setEditPos]    = useState('')
+  const [editSatPm,  setEditSatPm]  = useState(false)
   const [mobileView, setMobileView] = useState<'staff'|'day'>('staff')
   const [selectedStaff, setSelectedStaff] = useState<string>('')
   const holidays = getHolidaySet()
@@ -182,7 +183,10 @@ export default function ShiftPage() {
 
   const openEdit = (date: string, sid: string, pos: string, closed: boolean) => {
     if (closed) return
-    setEditPos(pos); setEditViol([]); setEditCell({ date, sid, pos })
+    setEditPos(pos)
+    setEditViol([])
+    setEditSatPm(isSatPm(date, sid))
+    setEditCell({ date, sid, pos })
   }
 
   const onSelectChange = (newPos: string) => {
@@ -202,6 +206,21 @@ export default function ShiftPage() {
     setShifts(prev => prev.map(s =>
       s.date === editCell.date && s.staff_id === editCell.sid ? { ...s, position: editPos } : s
     ))
+
+    // 🌙（午後稼働）の更新
+    if (editSatPm) {
+      await fetch('/api/saturday_pm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: editCell.date, staff_id: editCell.sid }),
+      })
+      setSatPm(prev => [...prev.filter(r => !(r.date === editCell.date && r.staff_id === editCell.sid)),
+        { date: editCell.date, staff_id: editCell.sid }])
+    } else {
+      await fetch(`/api/saturday_pm?date=${editCell.date}&staff_id=${editCell.sid}`, { method: 'DELETE' })
+      setSatPm(prev => prev.filter(r => !(r.date === editCell.date && r.staff_id === editCell.sid)))
+    }
+
     setEditCell(null); setEditViol([])
   }
 
@@ -499,6 +518,18 @@ export default function ShiftPage() {
                 <option key={p} value={p}>{POS_BADGE[p]}：{POS_LABEL[p]}</option>
               ))}
             </select>
+            {/* 土曜日のみ🌙チェックボックスを表示 */}
+            {allDays.find(d => d.date === editCell.date)?.saturday && (
+              <label className="flex items-center gap-2 mb-3 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editSatPm}
+                  onChange={e => setEditSatPm(e.target.checked)}
+                  className="w-4 h-4"
+                />
+                <span>🌙 午後も稼働（土曜午後勤務）</span>
+              </label>
+            )}
             {editViol.length > 0 && (
               <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
                 <p className="text-xs font-semibold text-red-600 mb-1">⚠️ 制約違反</p>
