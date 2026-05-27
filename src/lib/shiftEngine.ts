@@ -296,22 +296,26 @@ export function generateMonth(
         // ★候補
         const usECands = eCandidates.filter(s => usStaff.has(s))
 
-        // 月曜日はE①・E②に★を優先
-        if (isHeavy && wd === '月') {
-          // E①・E②に★を2名確保
+        if (wd === '月') {
+          // 月曜：★をE①・E②に優先配置
+          // E①回数が最少かつ直前がE①でない★を選出
           const usSorted = [...usECands].sort((a, b) => {
-            const diff = (e1Count[a] ?? 0) - (e1Count[b] ?? 0)
-            if (diff !== 0) return diff
+            // 直前がE①の場合は強いペナルティ
+            const aPrevE1 = prevPos[a] === 'E1' ? 50 : 0
+            const bPrevE1 = prevPos[b] === 'E1' ? 50 : 0
+            const aScore = (e1Count[a] ?? 0) + aPrevE1
+            const bScore = (e1Count[b] ?? 0) + bPrevE1
+            if (aScore !== bScore) return aScore - bScore
             return Math.random() - 0.5
           })
-          // E①
+          // E①に1名（★）
           if (usSorted[0]) {
             eSelected.push(usSorted[0])
             e1Count[usSorted[0]] = (e1Count[usSorted[0]] ?? 0) + 1
           }
-          // E②（別の★）
+          // E②にもう1名（★・E①と別人）
           if (usSorted[1]) eSelected.push(usSorted[1])
-          // 残り
+          // 残り枠
           const remAssigned = new Set<StaffId>(eSelected)
           for (let i = eSelected.length; i < eCount; i++) {
             const remaining = eCandidates.filter(s => !remAssigned.has(s))
@@ -322,8 +326,12 @@ export function generateMonth(
           // 通常：E①に★1名確保
           if (usECands.length > 0) {
             const usSorted = [...usECands].sort((a, b) => {
-              const diff = (e1Count[a] ?? 0) - (e1Count[b] ?? 0)
-              if (diff !== 0) return diff
+              // 直前がE①なら強いペナルティ（連続防止）
+              const aPrevE1 = prevPos[a] === 'E1' ? 30 : 0
+              const bPrevE1 = prevPos[b] === 'E1' ? 30 : 0
+              const aScore = (e1Count[a] ?? 0) * 3 + aPrevE1
+              const bScore = (e1Count[b] ?? 0) * 3 + bPrevE1
+              if (aScore !== bScore) return aScore - bScore
               const aPrevE = ['E1','E2','E3','E4','E'].includes(prevPos[a] ?? '') ? 1 : 0
               const bPrevE = ['E1','E2','E3','E4','E'].includes(prevPos[b] ?? '') ? 1 : 0
               if (aPrevE !== bPrevE) return aPrevE - bPrevE
