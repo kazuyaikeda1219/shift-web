@@ -70,8 +70,9 @@ function checkViolations(
   const e1Count = Object.entries(proposed).filter(([, p]) => p === 'E1').length
   if (e1Count > 1) violations.push(`E① は1日1名までです（現在 ${e1Count} 名）`)
 
-  const usInAB = Object.entries(proposed).filter(([sid, p]) => (p === 'A' || p === 'B') && usStaff.has(sid)).length
-  if (usInAB > 1) violations.push(`★のA/B配置は1日1名までです（現在 ${usInAB} 名）`)
+  const usInA = Object.entries(proposed).some(([sid, p]) => p === 'A' && usStaff.has(sid))
+  const usInB = Object.entries(proposed).some(([sid, p]) => p === 'B' && usStaff.has(sid))
+  if (usInA && usInB) violations.push('★（US担当者）がAとBの両方に配置されています')
 
   const kubun = kubunOf(targetSid)
   const name  = staffMap[targetSid]?.name ?? targetSid

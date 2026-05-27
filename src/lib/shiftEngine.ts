@@ -280,12 +280,17 @@ export function generateMonth(
       for (const pos of ['A', 'B', 'C', 'D']) {
         let cands = available.filter(s => !assigned.has(s) && !blocked(s, false, pos, halfAm, halfPm))
         if (pos === 'A' || pos === 'B') {
-          const usAbUsed = Object.entries(assignment)
-            .filter(([sid, p]) => (p === 'A' || p === 'B') && usStaff.has(sid)).length
-          if (usAbUsed >= US_AB_MAX) cands = cands.filter(s => !usStaff.has(s))
+          // ★がAまたはBにすでに1名いる場合、もう一方にも★を入れない
+          const usInA = Object.entries(assignment).some(([sid, p]) => p === 'A' && usStaff.has(sid))
+          const usInB = Object.entries(assignment).some(([sid, p]) => p === 'B' && usStaff.has(sid))
+          if (usInA || usInB) cands = cands.filter(s => !usStaff.has(s))
         }
-        // 月曜日は★をDに入れない
-        if (pos === 'D' && wd === '月') {
+        // 月・水は★をDに入れない
+        if (pos === 'D' && (wd === '月' || wd === '水')) {
+          cands = cands.filter(s => !usStaff.has(s))
+        }
+        // 月・水は★をCに入れない
+        if (pos === 'C' && (wd === '月' || wd === '水')) {
           cands = cands.filter(s => !usStaff.has(s))
         }
         const picked = pickOne(cands, assigned, prevPos, posCount, heavyECount, isHeavy, false, pos)
