@@ -9,17 +9,18 @@ type RequestRow = { date: string; staff_id: string; kubun: string }
 type SatPmRow = { date: string; staff_id: string }
 
 const E_SLOTS = ['E1','E2','E3','E4']
+const e_SLOTS = ['e1','e2','e3','e4']
 
 const POS_BADGE: Record<string, string> = {
   'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D',
   'E1': 'E①', 'E2': 'E②', 'E3': 'E③', 'E4': 'E④',
-  'E': 'E',
+  'e1': 'e①', 'e2': 'e②', 'e3': 'e③', 'e4': 'e④',
   '全休': '全休', '午前半休': '午前半休', '午後半休': '午後半休', '－': '－',
 }
 const POS_LABEL: Record<string, string> = {
   'A': '血液検査', 'B': 'CBC', 'C': '心電図', 'D': '昼１',
   'E1': '専任枠', 'E2': 'エコー枠', 'E3': 'エコー枠', 'E4': 'エコー枠',
-  'E': 'エコー枠',
+  'e1': 'エコー枠', 'e2': 'エコー枠', 'e3': 'エコー枠', 'e4': 'エコー枠',
   '全休': '全休', '午前半休': '午前半休', '午後半休': '午後半休', '－': '－',
 }
 const POS_COLOR: Record<string, string> = {
@@ -31,13 +32,16 @@ const POS_COLOR: Record<string, string> = {
   'E2': 'bg-orange-100 border-orange-300',
   'E3': 'bg-orange-100 border-orange-300',
   'E4': 'bg-orange-100 border-orange-300',
-  'E':  'bg-orange-50 border-orange-200',
+  'e1': 'bg-teal-100 border-teal-300',
+  'e2': 'bg-teal-50 border-teal-200',
+  'e3': 'bg-teal-50 border-teal-200',
+  'e4': 'bg-teal-50 border-teal-200',
   '全休':    'bg-slate-100 border-slate-300',
   '午前半休': 'bg-pink-100 border-pink-300',
   '午後半休': 'bg-pink-100 border-pink-300',
   '－': 'bg-slate-50 border-slate-200',
 }
-const EDIT_OPTIONS = ['A','B','C','D','E1','E2','E3','E4','E','全休','午前半休','午後半休','－']
+const EDIT_OPTIONS = ['A','B','C','D','E1','E2','E3','E4','e1','e2','e3','e4','全休','午前半休','午後半休','－']
 const WEEKDAY = ['日','月','火','水','木','金','土']
 const WEEKDAY_FULL = ['日曜','月曜','火曜','水曜','木曜','金曜','土曜']
 
@@ -56,23 +60,19 @@ function checkViolations(
   const dayReq   = requests.filter(r => r.date === date)
   const kubunOf  = (sid: string) => dayReq.find(r => r.staff_id === sid)?.kubun ?? null
 
-  // EグループにUS担当者が1名もいない
-  const allEPos = ['E1','E2','E3','E4','E']
+  const allEPos = ['E1','E2','E3','E4','e1','e2','e3','e4']
   if (allEPos.includes(newPos)) {
     const eStaff = Object.entries(proposed).filter(([, p]) => allEPos.includes(p)).map(([sid]) => sid)
     if (!eStaff.some(sid => usStaff.has(sid)))
       violations.push('Eグループに★（US担当者）が1名も含まれていません')
   }
 
-  // E①が2名以上
   const e1Count = Object.entries(proposed).filter(([, p]) => p === 'E1').length
   if (e1Count > 1) violations.push(`E① は1日1名までです（現在 ${e1Count} 名）`)
 
-  // ★がA/Bに2名以上
   const usInAB = Object.entries(proposed).filter(([sid, p]) => (p === 'A' || p === 'B') && usStaff.has(sid)).length
   if (usInAB > 1) violations.push(`★のA/B配置は1日1名までです（現在 ${usInAB} 名）`)
 
-  // 半休制約
   const kubun = kubunOf(targetSid)
   const name  = staffMap[targetSid]?.name ?? targetSid
   if ((kubun === '午前半休' || kubun === '午後半休') && allEPos.includes(newPos))
@@ -153,14 +153,13 @@ export default function ShiftPage() {
     shiftMap[s.date][s.staff_id] = s.position
   }
 
-  // 土曜午後稼働セット: "date-staffId"
   const satPmSet = new Set(satPm.map(r => `${r.date}-${r.staff_id}`))
   const isSatPm = (date: string, sid: string) => satPmSet.has(`${date}-${sid}`)
 
   const handleGenerate = async () => {
     if (!confirm(`${year}年${month}月のシフトを生成しますか？`)) return
     setGenerating(true); setWarnings([])
-    const r    = await fetch('/api/generate', {
+    const r = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ year, month }),
@@ -212,7 +211,6 @@ export default function ShiftPage() {
     stats[s.staff_id][s.position] = (stats[s.staff_id][s.position] ?? 0) + 1
   }
 
-  // ── スマホ：スタッフ別ビュー ──
   const MobileStaffView = () => {
     const s = staff.find(s => s.id === selectedStaff)
     return (
@@ -234,8 +232,8 @@ export default function ShiftPage() {
             </div>
             <div className="divide-y divide-slate-100">
               {allDays.map(({ date, day, wd, closed, heavy, saturday }) => {
-                const pos   = shiftMap[date]?.[s.id] ?? '－'
-                const isPm  = isSatPm(date, s.id)
+                const pos  = shiftMap[date]?.[s.id] ?? '－'
+                const isPm = isSatPm(date, s.id)
                 if (closed) return (
                   <div key={date} className="flex items-center px-4 py-2.5 bg-slate-50 opacity-50">
                     <span className="w-16 text-sm text-slate-400">{day}日（{wd}）</span>
@@ -262,10 +260,9 @@ export default function ShiftPage() {
     )
   }
 
-  // ── スマホ：日付別ビュー ──
   const MobileDayView = () => {
-    const workDays  = allDays.filter(d => !d.closed)
-    const todayStr  = new Date().toISOString().slice(0, 10)
+    const workDays = allDays.filter(d => !d.closed)
+    const todayStr = new Date().toISOString().slice(0, 10)
     return (
       <div className="space-y-3">
         {workDays.map(({ date, day, wd, heavy, saturday }) => {
@@ -277,7 +274,7 @@ export default function ShiftPage() {
                 <span className={`font-semibold text-sm ${heavy ? 'text-orange-700' : saturday ? 'text-blue-700' : 'text-slate-700'}`}>
                   {day}日（{wd}）
                 </span>
-                {heavy    && <span className="text-[10px] bg-orange-200 text-orange-700 px-1.5 py-0.5 rounded">入院多</span>}
+                {heavy && <span className="text-[10px] bg-orange-200 text-orange-700 px-1.5 py-0.5 rounded">入院多</span>}
                 {date === todayStr && <span className="text-[10px] bg-green-200 text-green-700 px-1.5 py-0.5 rounded">今日</span>}
               </div>
               <div className="px-4 py-2 space-y-1.5">
@@ -388,7 +385,7 @@ export default function ShiftPage() {
           <div className="hidden md:block pc-view">
             {/* 凡例 */}
             <div className="flex gap-2 flex-wrap mb-3 text-xs items-center no-print">
-              {(['A','B','C','D','E1','E2','E','全休','午前半休'] as const).map(pos => (
+              {(['A','B','C','D','E1','E2','e1','全休','午前半休'] as const).map(pos => (
                 <span key={pos} className={`px-2 py-0.5 rounded border ${POS_COLOR[pos]}`}>
                   {POS_BADGE[pos]}：{POS_LABEL[pos]}
                 </span>
@@ -420,8 +417,8 @@ export default function ShiftPage() {
                         {s.can_us ? <span className="text-orange-500 mr-0.5">★</span> : <span className="mr-3" />}{s.name}
                       </td>
                       {allDays.map(({ date, closed, heavy, saturday }) => {
-                        const pos     = shiftMap[date]?.[s.id] ?? '－'
-                        const isPm    = isSatPm(date, s.id)
+                        const pos      = shiftMap[date]?.[s.id] ?? '－'
+                        const isPm     = isSatPm(date, s.id)
                         const colorCls = closed ? 'bg-slate-100 opacity-60 cursor-default' : (POS_COLOR[pos] ?? 'bg-white border-slate-200')
                         const ringCls  = !closed && heavy ? 'ring-1 ring-orange-300 ring-inset' : !closed && saturday ? 'ring-1 ring-blue-200 ring-inset' : ''
                         return (
@@ -453,7 +450,7 @@ export default function ShiftPage() {
                       {['A','B','C','D'].map(p => <th key={p} className="border border-slate-200 px-3 py-1.5 bg-slate-50">{p}</th>)}
                       <th className="border border-slate-200 px-3 py-1.5 bg-orange-100 font-semibold">E合計</th>
                       {E_SLOTS.map(k => <th key={k} className="border border-slate-200 px-3 py-1.5 bg-orange-50">{POS_BADGE[k]}</th>)}
-                      <th className="border border-slate-200 px-3 py-1.5 bg-orange-50">E</th>
+                      {e_SLOTS.map(k => <th key={k} className="border border-slate-200 px-3 py-1.5 bg-teal-50">{POS_BADGE[k]}</th>)}
                       {['全休','午前半休','午後半休'].map(p => <th key={p} className="border border-slate-200 px-2 py-1.5 bg-slate-50 text-[10px]">{p}</th>)}
                     </tr>
                   </thead>
@@ -465,12 +462,14 @@ export default function ShiftPage() {
                           <td key={p} className="border border-slate-200 px-3 py-1 text-center">{stats[s.id]?.[p] ?? 0}</td>
                         ))}
                         <td className="border border-slate-200 px-3 py-1 text-center bg-orange-100 font-semibold">
-                          {[...E_SLOTS, 'E'].reduce((sum, k) => sum + (stats[s.id]?.[k] ?? 0), 0)}
+                          {[...E_SLOTS, ...e_SLOTS].reduce((sum, k) => sum + (stats[s.id]?.[k] ?? 0), 0)}
                         </td>
                         {E_SLOTS.map(k => (
                           <td key={k} className="border border-slate-200 px-3 py-1 text-center bg-orange-50">{stats[s.id]?.[k] ?? 0}</td>
                         ))}
-                        <td className="border border-slate-200 px-3 py-1 text-center bg-orange-50">{stats[s.id]?.['E'] ?? 0}</td>
+                        {e_SLOTS.map(k => (
+                          <td key={k} className="border border-slate-200 px-3 py-1 text-center bg-teal-50">{stats[s.id]?.[k] ?? 0}</td>
+                        ))}
                         {['全休','午前半休','午後半休'].map(p => (
                           <td key={p} className="border border-slate-200 px-2 py-1 text-center">{stats[s.id]?.[p] ?? 0}</td>
                         ))}

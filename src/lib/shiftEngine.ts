@@ -1,8 +1,8 @@
 // シフト生成エンジン
 export type Position =
   | 'A' | 'B' | 'C' | 'D'
-  | 'E1' | 'E2' | 'E3' | 'E4'  // ★付き番号あり
-  | 'E'                          // ★なし番号なし
+  | 'E1' | 'E2' | 'E3' | 'E4'   // ★あり
+  | 'e1' | 'e2' | 'e3' | 'e4'   // ★なし
   | '全休' | '午前半休' | '午後半休' | '－'
 
 export type StaffId = string
@@ -257,13 +257,21 @@ export function generateMonth(
         }
       }
 
-      // 残りはE（★なし・番号なし）
-      for (const sid of available) {
-        if (!assignment[sid]) {
-          assignment[sid] = 'E'
-          posCount[sid]['E'] = (posCount[sid]['E'] ?? 0) + 1
-          prevPos[sid] = 'E'
-        }
+      // 残りはe①②③④（★なし・sort_order順）
+      const satNonUs = available.filter(sid => !assignment[sid])
+        .sort((a, b) => {
+          const oa = staffList.find(s => s.id === a)?.sort_order ?? 99
+          const ob = staffList.find(s => s.id === b)?.sort_order ?? 99
+          return oa - ob
+        })
+      const eSmallSlotsSat = ['e1','e2','e3','e4'] as const
+      const shuffledSat = [...eSmallSlotsSat.slice(0, satNonUs.length)].sort(() => Math.random() - 0.5)
+      for (let i = 0; i < satNonUs.length; i++) {
+        const sid  = satNonUs[i]
+        const slot = shuffledSat[i] as Position
+        assignment[sid] = slot
+        posCount[sid][slot] = (posCount[sid][slot] ?? 0) + 1
+        prevPos[sid] = slot
       }
 
     } else {
@@ -275,6 +283,10 @@ export function generateMonth(
           const usAbUsed = Object.entries(assignment)
             .filter(([sid, p]) => (p === 'A' || p === 'B') && usStaff.has(sid)).length
           if (usAbUsed >= US_AB_MAX) cands = cands.filter(s => !usStaff.has(s))
+        }
+        // 月曜日は★をDに入れない
+        if (pos === 'D' && wd === '月') {
+          cands = cands.filter(s => !usStaff.has(s))
         }
         const picked = pickOne(cands, assigned, prevPos, posCount, heavyECount, isHeavy, false, pos)
         if (picked) {
@@ -380,12 +392,22 @@ export function generateMonth(
           if (isHeavy) heavyECount[sid] = (heavyECount[sid] ?? 0) + 1
         }
 
-        // ★なしはE
-        for (const sid of nonUsInE) {
-          assignment[sid] = 'E'
+        // ★なしはsort_order順にe①②③④を付与
+        const nonUsSorted = nonUsInE.sort((a, b) => {
+          const oa = staffList.find(s => s.id === a)?.sort_order ?? 99
+          const ob = staffList.find(s => s.id === b)?.sort_order ?? 99
+          return oa - ob
+        })
+        // e系のスロット：累計回数が少ないスロットから割り当て
+        const eSmallSlots = ['e1','e2','e3','e4'] as const
+        const shuffledSmall = [...eSmallSlots.slice(0, nonUsSorted.length)].sort(() => Math.random() - 0.5)
+        for (let i = 0; i < nonUsSorted.length; i++) {
+          const sid  = nonUsSorted[i]
+          const slot = shuffledSmall[i] as Position
+          assignment[sid] = slot
           assigned.add(sid)
-          posCount[sid]['E'] = (posCount[sid]['E'] ?? 0) + 1
-          prevPos[sid] = 'E'
+          posCount[sid][slot] = (posCount[sid][slot] ?? 0) + 1
+          prevPos[sid] = slot
           if (isHeavy) heavyECount[sid] = (heavyECount[sid] ?? 0) + 1
         }
       }
