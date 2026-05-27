@@ -49,7 +49,19 @@
   .mt-6 {
     margin-top: 6px !important;
   }
-
+/* 下書き透かし */
+  body.is-draft::after {
+    content: '下書き';
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-30deg);
+    font-size: 120px;
+    color: rgba(0, 0, 0, 0.06);
+    font-weight: bold;
+    pointer-events: none;
+    z-index: 9999;
+  }
   /* 背景色を印刷時に強制適用 */
   [class*="bg-orange"] {
     -webkit-print-color-adjust: exact;

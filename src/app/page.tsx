@@ -4,7 +4,7 @@ import { isClosed } from '@/lib/shiftEngine'
 import { getHolidaySet } from '@/lib/holidays'
 
 type Staff = { id: string; name: string; can_us: boolean; sort_order: number }
-type ShiftRow = { date: string; staff_id: string; position: string }
+type ShiftRow = { date: string; staff_id: string; position: string; is_draft: boolean }
 type RequestRow = { date: string; staff_id: string; kubun: string }
 type SatPmRow = { date: string; staff_id: string }
 
@@ -94,6 +94,7 @@ export default function ShiftPage() {
   const [dayReqs,    setDayReqs]    = useState<RequestRow[]>([])
   const [loading,    setLoading]    = useState(false)
   const [generating, setGenerating] = useState(false)
+  const [isDraft, setIsDraft] = useState<boolean | null>(null)
   const [warnings,   setWarnings]   = useState<string[]>([])
   const [editCell,   setEditCell]   = useState<{date:string;sid:string;pos:string}|null>(null)
   const [editViol,   setEditViol]   = useState<string[]>([])
@@ -120,7 +121,13 @@ export default function ShiftPage() {
     const sdata = await sr.json()
     const rdata = await rr.json()
 
-    setShifts(Array.isArray(sdata.shifts) ? sdata.shifts : [])
+    const shiftList = Array.isArray(sdata.shifts) ? sdata.shifts : []
+    setShifts(shiftList)
+    if (shiftList.length > 0) {
+      setIsDraft(shiftList.some((s: ShiftRow) => s.is_draft))
+    } else {
+      setIsDraft(null)
+    }
     setSatPm(Array.isArray(sdata.saturday_pm) ? sdata.saturday_pm : [])
 
     if (Array.isArray(rdata)) {
@@ -179,6 +186,16 @@ export default function ShiftPage() {
     const last  = `${year}-${pad(month)}-${new Date(year, month, 0).getDate()}`
     await fetch(`/api/shift?from=${first}&to=${last}`, { method: 'DELETE' })
     await fetchShifts()
+  }
+
+    const handleConfirm = async () => {
+    if (!confirm(`${year}年${month}月のシフトを確定しますか？\n確定後も編集は可能ですが、再生成すると下書きに戻ります。`)) return
+    await fetch('/api/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year, month }),
+    })
+    setIsDraft(false)
   }
 
   const openEdit = (date: string, sid: string, pos: string, closed: boolean) => {
@@ -348,7 +365,29 @@ export default function ShiftPage() {
           className="bg-red-400 hover:bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium">
           🗑 シフトをリセット
         </button>
-        <button onClick={() => window.print()}
+        {/* ここに追加 */}
+        {isDraft === true && (
+          <button onClick={handleConfirm}
+            className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-1.5 rounded text-sm font-medium">
+            ✅ 確定する
+          </button>
+        )}
+        {isDraft === true && (
+          <span className="bg-yellow-100 text-yellow-700 border border-yellow-300 px-3 py-1 rounded-full text-xs font-medium">
+            📝 下書き
+          </span>
+        )}
+        {isDraft === false && (
+          <span className="bg-emerald-100 text-emerald-700 border border-emerald-300 px-3 py-1 rounded-full text-xs font-medium">
+            ✅ 確定済み
+          </span>
+        )}
+        <button onClick={() => {
+            if (isDraft) document.body.classList.add('is-draft')
+            else document.body.classList.remove('is-draft')
+            window.print()
+            document.body.classList.remove('is-draft')
+          }}
           className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-1.5 rounded text-sm font-medium">
           🖨 印刷／PDF保存
         </button>

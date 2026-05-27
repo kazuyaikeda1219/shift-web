@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   const last  = `${year}-${pad(month)}-${new Date(year, month, 0).getDate()}`
 
   const [shiftRes, pmRes] = await Promise.all([
-    supabase.from('shifts').select('date, staff_id, position').gte('date', first).lte('date', last).order('date').order('staff_id'),
+    supabase.from('shifts').select('date, staff_id, position, is_draft').gte('date', first).lte('date', last).order('date').order('staff_id'),
     supabase.from('saturday_pm').select('date, staff_id').gte('date', first).lte('date', last),
   ])
 

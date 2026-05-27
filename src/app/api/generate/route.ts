@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
   const rows = result.flatMap(day =>
     Object.entries(day.assignments).map(([staff_id, position]) => ({
-      year, month, date: day.date, staff_id, position,
+      year, month, date: day.date, staff_id, position, is_draft: true,
     }))
   )
 
