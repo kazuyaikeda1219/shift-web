@@ -360,16 +360,18 @@ export function generateMonth(
         const usInE   = eSelected.filter(s => usStaff.has(s))
         const nonUsInE = eSelected.filter(s => !usStaff.has(s))
 
-        // ★をsort_order順に並べてE①②③④を付与
-        const usSorted = usInE.sort((a, b) => {
+        // E①は選出された★の先頭（e1Count最少の人）、残りはsort_order順
+        const e1Winner = eSelected[0]  // E①確定（既にe1Countで選ばれた人）
+        const otherUs = usInE.filter(s => s !== e1Winner).sort((a, b) => {
           const oa = staffList.find(s => s.id === a)?.sort_order ?? 99
           const ob = staffList.find(s => s.id === b)?.sort_order ?? 99
           return oa - ob
         })
+        const usFinal = [e1Winner, ...otherUs].filter(Boolean)
         const eStarSlots = ['E1','E2','E3','E4'] as const
 
-        for (let i = 0; i < usSorted.length; i++) {
-          const sid  = usSorted[i]
+        for (let i = 0; i < usFinal.length; i++) {
+          const sid  = usFinal[i]
           const slot = eStarSlots[i]
           assignment[sid] = slot
           assigned.add(sid)
