@@ -120,17 +120,17 @@ export default function ShiftPage() {
 
   const daysInMonth = new Date(year, month, 0).getDate()
   const allDays = Array.from({ length: daysInMonth }, (_, i) => {
-    const d = new Date(year, month - 1, i + 1)
-    return {
-      date: d.toISOString().slice(0, 10),
-      wd:      WEEKDAY[d.getDay()],
-      wdFull:  WEEKDAY_FULL[d.getDay()],
-      day:     i + 1,
-      closed:  isClosed(d, holidays),
-      heavy:   ['月','水'].includes(WEEKDAY[d.getDay()]),
-      saturday: d.getDay() === 6,
-    }
-  })
+  const d = new Date(year, month - 1, i + 1)
+  return {
+    date: d.toISOString().slice(0, 10),
+    wd:      WEEKDAY[d.getUTCDay()],
+    wdFull:  WEEKDAY_FULL[d.getUTCDay()],
+    day:     i + 1,
+    closed:  isClosed(d, holidays),
+    heavy:   ['月','水'].includes(WEEKDAY[d.getUTCDay()]),
+    saturday: d.getUTCDay() === 6,
+  }
+})
 
   const shiftMap: Record<string, Record<string, string>> = {}
   for (const s of shifts) {

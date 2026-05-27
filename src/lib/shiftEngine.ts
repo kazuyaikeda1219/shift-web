@@ -33,7 +33,8 @@ const WEEKDAY_JP = ['月', '火', '水', '木', '金', '土', '日']
 const HEAVY_DAYS = ['月', '水']
 
 function weekdayJp(d: Date): string {
-  return WEEKDAY_JP[d.getDay() === 0 ? 6 : d.getDay() - 1]
+  const utcDay = d.getUTCDay()
+  return WEEKDAY_JP[utcDay === 0 ? 6 : utcDay - 1]
 }
 
 function weekOfMonth(d: Date): number {
