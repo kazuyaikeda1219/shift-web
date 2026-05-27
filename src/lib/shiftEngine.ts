@@ -1,8 +1,10 @@
 // シフト生成エンジン
-// E1〜E4: Eグループ（4名）、スタッフ並び順で番号付与
-// 制約: 4名のうち必ず1名はUS担当者（★）を含む
+export type Position =
+  | 'A' | 'B' | 'C' | 'D'
+  | 'E1' | 'E2' | 'E3' | 'E4'  // ★付き番号あり
+  | 'E'                          // ★なし番号なし
+  | '全休' | '午前半休' | '午後半休' | '－'
 
-export type Position = 'A' | 'B' | 'C' | 'D' | 'E1' | 'E2' | 'E3' | 'E4' | '全休' | '午前半休' | '午後半休' | '－'
 export type StaffId = string
 
 export interface Staff {
@@ -20,6 +22,15 @@ export interface RequestEntry {
   kubun: '全休' | '午前半休' | '午後半休'
 }
 
+// 土曜午後勤務登録
+export interface SaturdayEntry {
+  year: number
+  month: number
+  day: number
+  a_staff_id: StaffId    // A担当（午後まで）
+  e1_staff_id: StaffId   // E①担当（午後まで）
+}
+
 export interface DayAssignment {
   date: string
   weekday: string
@@ -27,6 +38,7 @@ export interface DayAssignment {
   is_heavy: boolean
   is_saturday: boolean
   assignments: Record<StaffId, Position>
+  saturday_pm: StaffId[]  // 土曜午後稼働の人（A・E①担当）
 }
 
 const WEEKDAY_JP = ['月', '火', '水', '木', '金', '土', '日']
@@ -42,7 +54,7 @@ function weekOfMonth(d: Date): number {
 }
 
 export function isClosed(d: Date, holidays: Set<string>): boolean {
-  const dow = d.getDay()
+  const dow = d.getUTCDay()
   const dateStr = d.toISOString().slice(0, 10)
   if (dow === 0) return true
   if (holidays.has(dateStr)) return true
@@ -51,13 +63,18 @@ export function isClosed(d: Date, holidays: Set<string>): boolean {
 }
 
 function isSaturday(d: Date): boolean {
-  return d.getDay() === 6
+  return d.getUTCDay() === 6
 }
 
-// 半休による配置制限
-function blocked(sid: StaffId, isE: boolean, pos: string, halfAm: Set<StaffId>, halfPm: Set<StaffId>): boolean {
-  if (isE && (halfAm.has(sid) || halfPm.has(sid))) return true   // E系は半休全員NG
-  if (pos === 'D' && halfPm.has(sid)) return true                 // 午後半休はD不可
+function blocked(
+  sid: StaffId,
+  isE: boolean,
+  pos: string,
+  halfAm: Set<StaffId>,
+  halfPm: Set<StaffId>
+): boolean {
+  if (isE && (halfAm.has(sid) || halfPm.has(sid))) return true
+  if (pos === 'D' && halfPm.has(sid)) return true
   return false
 }
 
@@ -77,30 +94,21 @@ function pickOne(
   function score(s: StaffId): number {
     let sc = 0
     const prev    = prevPos[s] ?? ''
-    const prevIsE = ['E1','E2','E3','E4'].includes(prev)
+    const prevIsE = ['E1','E2','E3','E4','E'].includes(prev)
     const curIsE  = isESlot
 
-    // 連続同配置ペナルティ
     if (curIsE && prevIsE) sc += 80
     else if (!curIsE && prev === posKey) sc += 100
 
-    if (posKey === 'E1') {
-      // ── E①専用スコア：E全体合計と切り離して個別管理 ──
-      const e1Count = posCount[s]?.['E1'] ?? 0
-      sc += e1Count * 30                              // E①回数に強いペナルティ
-      if (isHeavy) sc += (heavyECount[s] ?? 0) * 15  // 月・水偏り防止
-    } else if (curIsE) {
-      // ── E②③④：E全体合計で均等化 ──
-      const eTotal = (['E1','E2','E3','E4'] as const)
+    if (curIsE) {
+      const eTotal = (['E1','E2','E3','E4','E'] as const)
         .reduce((a, k) => a + (posCount[s]?.[k] ?? 0), 0)
       sc += eTotal * 12
       if (isHeavy) sc += (heavyECount[s] ?? 0) * 8
     } else {
-      // ── A/B/C/D：配置ごとの回数で均等化 ──
       sc += (posCount[s]?.[posKey] ?? 0) * 10
     }
 
-    // 総出勤数均等化
     const total = Object.values(posCount[s] ?? {}).reduce((a, b) => a + b, 0)
     sc += total * 2
     sc += Math.random()
@@ -117,11 +125,11 @@ export function generateMonth(
   staffList: Staff[],
   requests: RequestEntry[],
   holidays: Set<string>,
+  saturdayEntries: SaturdayEntry[],
 ): { result: DayAssignment[], warnings: string[] } {
   const warnings: string[] = []
   const result: DayAssignment[] = []
 
-  // sort_order順に並べたスタッフID（番号付与の基準）
   const sortedStaff = [...staffList].sort((a, b) => a.sort_order - b.sort_order)
   const staffIds    = sortedStaff.map(s => s.id)
   const usStaff     = new Set(staffList.filter(s => s.can_us).map(s => s.id))
@@ -133,15 +141,27 @@ export function generateMonth(
     reqMap[key][r.staff_id] = r.kubun
   }
 
+  // 土曜午後勤務マップ
+  const satMap: Record<string, SaturdayEntry> = {}
+  for (const s of saturdayEntries) {
+    const key = `${s.year}-${String(s.month).padStart(2,'0')}-${String(s.day).padStart(2,'0')}`
+    satMap[key] = s
+  }
+
   const prevPos: Record<StaffId, string> = {}
   const posCount: Record<StaffId, Record<string, number>> = {}
   const heavyECount: Record<StaffId, number> = {}
-  for (const sid of staffIds) { posCount[sid] = {}; heavyECount[sid] = 0 }
+  const e1Count: Record<StaffId, number> = {}
+  for (const sid of staffIds) {
+    posCount[sid] = {}
+    heavyECount[sid] = 0
+    e1Count[sid] = 0
+  }
 
   const daysInMonth = new Date(year, month, 0).getDate()
 
   for (let day = 1; day <= daysInMonth; day++) {
-    const d       = new Date(year, month - 1, day)
+    const d       = new Date(Date.UTC(year, month - 1, day))
     const dateStr = d.toISOString().slice(0, 10)
     const wd      = weekdayJp(d)
     const closed  = isClosed(d, holidays)
@@ -153,6 +173,7 @@ export function generateMonth(
         date: dateStr, weekday: wd,
         is_closed: true, is_heavy: false, is_saturday: isSat,
         assignments: Object.fromEntries(staffIds.map(sid => [sid, '全休'])) as Record<StaffId, Position>,
+        saturday_pm: [],
       })
       continue
     }
@@ -170,112 +191,207 @@ export function generateMonth(
     for (const sid of halfPm)  assignment[sid] = '午後半休'
 
     const assigned = new Set<StaffId>()
+    const saturdayPm: StaffId[] = []
 
-    // ── A/B/C/D を割り当て ──
-    const US_AB_MAX = 1
-    for (const pos of ['A', 'B', 'C', 'D']) {
-      let cands = available.filter(s => !assigned.has(s) && !blocked(s, false, pos, halfAm, halfPm))
-      if (pos === 'A' || pos === 'B') {
-        const usAbUsed = Object.entries(assignment).filter(([sid, p]) => (p === 'A' || p === 'B') && usStaff.has(sid)).length
-        if (usAbUsed >= US_AB_MAX) cands = cands.filter(s => !usStaff.has(s))
-      }
-      const picked = pickOne(cands, assigned, prevPos, posCount, heavyECount, isHeavy, false, pos)
-      if (picked) {
-        assignment[picked] = pos as Position
-        assigned.add(picked)
-        posCount[picked][pos] = (posCount[picked][pos] ?? 0) + 1
-        prevPos[picked] = pos
+    if (isSat) {
+      // ── 土曜（偶数週）のロジック ──
+      const satEntry = satMap[dateStr]
+
+      // A担当（午後まで・★のみ）
+      let aPerson: StaffId | null = null
+      if (satEntry?.a_staff_id && available.includes(satEntry.a_staff_id)) {
+        aPerson = satEntry.a_staff_id
       } else {
-        warnings.push(`${dateStr} (${pos})：割り当て可能なスタッフ不足`)
+        const aCands = available.filter(s => usStaff.has(s) && !assigned.has(s))
+        aPerson = pickOne(aCands, assigned, prevPos, posCount, heavyECount, false, false, 'A')
       }
-    }
+      if (aPerson) {
+        assignment[aPerson] = 'A'
+        assigned.add(aPerson)
+        posCount[aPerson]['A'] = (posCount[aPerson]['A'] ?? 0) + 1
+        prevPos[aPerson] = 'A'
+        saturdayPm.push(aPerson)
+      }
 
-// ── Eグループ4名を選出 ──
-    const eCandidates = available.filter(s => !assigned.has(s) && !blocked(s, true, '', halfAm, halfPm))
-    const eCount = Math.max(0, 4 - restCount)
-
-    const eSelected: StaffId[] = []
-
-    if (eCount > 0) {
-      // E①担当者（★）を確定的に選出
-      // 「E①回数が最少」→「直前がE系でない」→「月水E回数が最少」の優先順で決定
-      const usECands = eCandidates.filter(s => usStaff.has(s))
-      if (usECands.length > 0) {
-        const usSorted = [...usECands].sort((a, b) => {
-          // ① E①回数が少ない順（最優先）
-          const e1Diff = (posCount[a]?.['E1'] ?? 0) - (posCount[b]?.['E1'] ?? 0)
-          if (e1Diff !== 0) return e1Diff
-          // ② 直前がE系でない人を優先
-          const aPrevE = ['E1','E2','E3','E4'].includes(prevPos[a] ?? '') ? 1 : 0
-          const bPrevE = ['E1','E2','E3','E4'].includes(prevPos[b] ?? '') ? 1 : 0
-          if (aPrevE !== bPrevE) return aPrevE - bPrevE
-          // ③ 月・水のE担当回数が少ない順
-          const heavyDiff = (heavyECount[a] ?? 0) - (heavyECount[b] ?? 0)
-          if (heavyDiff !== 0) return heavyDiff
-          // ④ 乱数（同条件時）
+      // E①担当（午後まで・★のみ）
+      let e1Person: StaffId | null = null
+      if (satEntry?.e1_staff_id && available.includes(satEntry.e1_staff_id) && !assigned.has(satEntry.e1_staff_id)) {
+        e1Person = satEntry.e1_staff_id
+      } else {
+        const e1Cands = available.filter(s => usStaff.has(s) && !assigned.has(s))
+        const e1Sorted = [...e1Cands].sort((a, b) => {
+          const diff = (e1Count[a] ?? 0) - (e1Count[b] ?? 0)
+          if (diff !== 0) return diff
           return Math.random() - 0.5
         })
-        eSelected.push(usSorted[0])
-      } else {
-        warnings.push(`${dateStr}：Eグループに★（US担当者）を割り当てできません`)
+        e1Person = e1Sorted[0] ?? null
+      }
+      if (e1Person) {
+        assignment[e1Person] = 'E1'
+        assigned.add(e1Person)
+        posCount[e1Person]['E1'] = (posCount[e1Person]['E1'] ?? 0) + 1
+        e1Count[e1Person] = (e1Count[e1Person] ?? 0) + 1
+        prevPos[e1Person] = 'E1'
+        saturdayPm.push(e1Person)
       }
 
-      // 残り枠（E②③④）をスコアで選出
-      const remAssigned = new Set<StaffId>(eSelected)
-      for (let i = eSelected.length; i < eCount; i++) {
-        const remaining = eCandidates.filter(s => !remAssigned.has(s))
-        const picked = pickOne(remaining, remAssigned, prevPos, posCount, heavyECount, isHeavy, true, 'Eb')
+      // E②（★のみ・午前のみ）
+      const e2Cands = available.filter(s => usStaff.has(s) && !assigned.has(s))
+      const e2Person = pickOne(e2Cands, assigned, prevPos, posCount, heavyECount, false, true, 'E2')
+      if (e2Person) {
+        assignment[e2Person] = 'E2'
+        assigned.add(e2Person)
+        posCount[e2Person]['E2'] = (posCount[e2Person]['E2'] ?? 0) + 1
+        prevPos[e2Person] = 'E2'
+      }
+
+      // B・C（誰でも可）
+      for (const pos of ['B', 'C']) {
+        const cands = available.filter(s => !assigned.has(s))
+        const picked = pickOne(cands, assigned, prevPos, posCount, heavyECount, false, false, pos)
         if (picked) {
-          eSelected.push(picked)
-          remAssigned.add(picked)
+          assignment[picked] = pos as Position
+          assigned.add(picked)
+          posCount[picked][pos] = (posCount[picked][pos] ?? 0) + 1
+          prevPos[picked] = pos
         }
       }
+
+      // 残りはE（★なし・番号なし）
+      for (const sid of available) {
+        if (!assignment[sid]) {
+          assignment[sid] = 'E'
+          posCount[sid]['E'] = (posCount[sid]['E'] ?? 0) + 1
+          prevPos[sid] = 'E'
+        }
+      }
+
+    } else {
+      // ── 平日のロジック ──
+      const US_AB_MAX = 1
+      for (const pos of ['A', 'B', 'C', 'D']) {
+        let cands = available.filter(s => !assigned.has(s) && !blocked(s, false, pos, halfAm, halfPm))
+        if (pos === 'A' || pos === 'B') {
+          const usAbUsed = Object.entries(assignment)
+            .filter(([sid, p]) => (p === 'A' || p === 'B') && usStaff.has(sid)).length
+          if (usAbUsed >= US_AB_MAX) cands = cands.filter(s => !usStaff.has(s))
+        }
+        const picked = pickOne(cands, assigned, prevPos, posCount, heavyECount, isHeavy, false, pos)
+        if (picked) {
+          assignment[picked] = pos as Position
+          assigned.add(picked)
+          posCount[picked][pos] = (posCount[picked][pos] ?? 0) + 1
+          prevPos[picked] = pos
+        } else {
+          warnings.push(`${dateStr} (${pos})：割り当て可能なスタッフ不足`)
+        }
+      }
+
+      // Eグループ（平日）
+      const eCandidates = available.filter(s => !assigned.has(s) && !blocked(s, true, '', halfAm, halfPm))
+      const eCount = Math.max(0, 4 - restCount)
+      const eSelected: StaffId[] = []
+
+      if (eCount > 0) {
+        // ★候補
+        const usECands = eCandidates.filter(s => usStaff.has(s))
+
+        // 月曜日はE①・E②に★を優先
+        if (isHeavy && wd === '月') {
+          // E①・E②に★を2名確保
+          const usSorted = [...usECands].sort((a, b) => {
+            const diff = (e1Count[a] ?? 0) - (e1Count[b] ?? 0)
+            if (diff !== 0) return diff
+            return Math.random() - 0.5
+          })
+          // E①
+          if (usSorted[0]) {
+            eSelected.push(usSorted[0])
+            e1Count[usSorted[0]] = (e1Count[usSorted[0]] ?? 0) + 1
+          }
+          // E②（別の★）
+          if (usSorted[1]) eSelected.push(usSorted[1])
+          // 残り
+          const remAssigned = new Set<StaffId>(eSelected)
+          for (let i = eSelected.length; i < eCount; i++) {
+            const remaining = eCandidates.filter(s => !remAssigned.has(s))
+            const picked = pickOne(remaining, remAssigned, prevPos, posCount, heavyECount, isHeavy, true, 'E')
+            if (picked) { eSelected.push(picked); remAssigned.add(picked) }
+          }
+        } else {
+          // 通常：E①に★1名確保
+          if (usECands.length > 0) {
+            const usSorted = [...usECands].sort((a, b) => {
+              const diff = (e1Count[a] ?? 0) - (e1Count[b] ?? 0)
+              if (diff !== 0) return diff
+              const aPrevE = ['E1','E2','E3','E4','E'].includes(prevPos[a] ?? '') ? 1 : 0
+              const bPrevE = ['E1','E2','E3','E4','E'].includes(prevPos[b] ?? '') ? 1 : 0
+              if (aPrevE !== bPrevE) return aPrevE - bPrevE
+              return (heavyECount[a] ?? 0) - (heavyECount[b] ?? 0)
+            })
+            eSelected.push(usSorted[0])
+            e1Count[usSorted[0]] = (e1Count[usSorted[0]] ?? 0) + 1
+          } else {
+            warnings.push(`${dateStr}：Eグループに★を割り当てできません`)
+          }
+          const remAssigned = new Set<StaffId>(eSelected)
+          for (let i = eSelected.length; i < eCount; i++) {
+            const remaining = eCandidates.filter(s => !remAssigned.has(s))
+            const picked = pickOne(remaining, remAssigned, prevPos, posCount, heavyECount, isHeavy, true, 'E')
+            if (picked) { eSelected.push(picked); remAssigned.add(picked) }
+          }
+        }
+
+        // 番号付与：★はE①〜、★なしはE
+        // E①に入る★（先頭）
+        const e1Sid = eSelected[0]
+        const others = eSelected.slice(1)
+
+        // ★かどうかでE番号 or E
+        // sort_order順に並べて番号付与
+        const usInE   = eSelected.filter(s => usStaff.has(s))
+        const nonUsInE = eSelected.filter(s => !usStaff.has(s))
+
+        // ★をsort_order順に並べてE①②③④を付与
+        const usSorted = usInE.sort((a, b) => {
+          const oa = staffList.find(s => s.id === a)?.sort_order ?? 99
+          const ob = staffList.find(s => s.id === b)?.sort_order ?? 99
+          return oa - ob
+        })
+        const eStarSlots = ['E1','E2','E3','E4'] as const
+
+        for (let i = 0; i < usSorted.length; i++) {
+          const sid  = usSorted[i]
+          const slot = eStarSlots[i]
+          assignment[sid] = slot
+          assigned.add(sid)
+          posCount[sid][slot] = (posCount[sid][slot] ?? 0) + 1
+          prevPos[sid] = slot
+          if (isHeavy) heavyECount[sid] = (heavyECount[sid] ?? 0) + 1
+        }
+
+        // ★なしはE
+        for (const sid of nonUsInE) {
+          assignment[sid] = 'E'
+          assigned.add(sid)
+          posCount[sid]['E'] = (posCount[sid]['E'] ?? 0) + 1
+          prevPos[sid] = 'E'
+          if (isHeavy) heavyECount[sid] = (heavyECount[sid] ?? 0) + 1
+        }
+      }
+
+      // 未配置は「－」
+      for (const sid of available) {
+        if (!assignment[sid]) assignment[sid] = '－'
+      }
     }
 
-// E①は先頭（US担当者）、E②③④はE②③④回数が少ない順に割り当て
-    const e1Person   = eSelected[0]  // US担当者（確定）
-    const ebPersons  = eSelected.slice(1)  // 残り
-
-    // E②③④をそれぞれの回数が少ない順に割り当て
-    const ebSlots = ['E2','E3','E4'] as const
-    // 各スロットの累計回数が少ない人から順に割り当て
-    const ebSorted = [...ebPersons].sort((a, b) => {
-      const aTotal = (posCount[a]?.['E2'] ?? 0) + (posCount[a]?.['E3'] ?? 0) + (posCount[a]?.['E4'] ?? 0)
-      const bTotal = (posCount[b]?.['E2'] ?? 0) + (posCount[b]?.['E3'] ?? 0) + (posCount[b]?.['E4'] ?? 0)
-      if (aTotal !== bTotal) return aTotal - bTotal
-      return Math.random() - 0.5
+    result.push({
+      date: dateStr, weekday: wd,
+      is_closed: false, is_heavy: isHeavy, is_saturday: isSat,
+      assignments: assignment,
+      saturday_pm: saturdayPm,
     })
-
-    // E①を割り当て
-    if (e1Person) {
-      assignment[e1Person] = 'E1'
-      assigned.add(e1Person)
-      posCount[e1Person]['E1'] = (posCount[e1Person]['E1'] ?? 0) + 1
-      prevPos[e1Person] = 'E1'
-      if (isHeavy) heavyECount[e1Person] = (heavyECount[e1Person] ?? 0) + 1
-    }
-
-// E②③④を割り当て（人ごとのE②③④合計回数で均等化、スロットはランダム）
-    const ebSlotsList = ebSlots.slice(0, ebSorted.length)
-    // スロットをシャッフル
-    const shuffledSlots = [...ebSlotsList].sort(() => Math.random() - 0.5)
-
-    for (let i = 0; i < ebSorted.length; i++) {
-      const sid  = ebSorted[i]
-      const slot = shuffledSlots[i]
-      assignment[sid] = slot
-      assigned.add(sid)
-      posCount[sid][slot] = (posCount[sid][slot] ?? 0) + 1
-      prevPos[sid] = slot
-      if (isHeavy) heavyECount[sid] = (heavyECount[sid] ?? 0) + 1
-    }
-
-    // 未配置は「－」
-    for (const sid of available) {
-      if (!assignment[sid]) assignment[sid] = '－'
-    }
-
-    result.push({ date: dateStr, weekday: wd, is_closed: false, is_heavy: isHeavy, is_saturday: isSat, assignments: assignment })
   }
 
   return { result, warnings }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/shift?year=2026&month=7
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -10,17 +12,16 @@ export async function GET(req: NextRequest) {
   const first = `${year}-${pad(month)}-01`
   const last  = `${year}-${pad(month)}-${new Date(year, month, 0).getDate()}`
 
-  const { data, error } = await supabase
-    .from('shifts')
-    .select('date, staff_id, position')
-    .gte('date', first)
-    .lte('date', last)
-    .order('date')
-    .order('staff_id')
+  const [shiftRes, pmRes] = await Promise.all([
+    supabase.from('shifts').select('date, staff_id, position').gte('date', first).lte('date', last).order('date').order('staff_id'),
+    supabase.from('saturday_pm').select('date, staff_id').gte('date', first).lte('date', last),
+  ])
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  if (shiftRes.error) return NextResponse.json({ error: shiftRes.error.message }, { status: 500 })
+  return NextResponse.json({ shifts: shiftRes.data, saturday_pm: pmRes.data ?? [] })
 }
+
+// PATCH と DELETE はそのまま残す
 
 // PATCH /api/shift  body: { date, staff_id, position }  （手動修正）
 export async function PATCH(req: NextRequest) {
