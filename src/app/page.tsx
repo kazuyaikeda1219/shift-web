@@ -86,22 +86,27 @@ function checkViolations(
 
 export default function ShiftPage() {
   const now = new Date()
-  const [year,       setYear]       = useState(now.getFullYear())
-  const [month,      setMonth]      = useState(now.getMonth() + 1)
-  const [staff,      setStaff]      = useState<Staff[]>([])
-  const [shifts,     setShifts]     = useState<ShiftRow[]>([])
-  const [satPm,      setSatPm]      = useState<SatPmRow[]>([])
-  const [dayReqs,    setDayReqs]    = useState<RequestRow[]>([])
-  const [loading,    setLoading]    = useState(false)
-  const [generating, setGenerating] = useState(false)
-  const [isDraft, setIsDraft] = useState<boolean | null>(null)
-  const [warnings,   setWarnings]   = useState<string[]>([])
-  const [editCell,   setEditCell]   = useState<{date:string;sid:string;pos:string}|null>(null)
-  const [editViol,   setEditViol]   = useState<string[]>([])
-  const [editPos,    setEditPos]    = useState('')
-  const [editSatPm,  setEditSatPm]  = useState(false)
-  const [mobileView, setMobileView] = useState<'staff'|'day'>('staff')
+  const [year,          setYear]          = useState(now.getFullYear())
+  const [month,         setMonth]         = useState(now.getMonth() + 1)
+  const [staff,         setStaff]         = useState<Staff[]>([])
+  const [shifts,        setShifts]        = useState<ShiftRow[]>([])
+  const [satPm,         setSatPm]         = useState<SatPmRow[]>([])
+  const [dayReqs,       setDayReqs]       = useState<RequestRow[]>([])
+  const [loading,       setLoading]       = useState(false)
+  const [generating,    setGenerating]    = useState(false)
+  const [warnings,      setWarnings]      = useState<string[]>([])
+  const [editCell,      setEditCell]      = useState<{date:string;sid:string;pos:string}|null>(null)
+  const [editViol,      setEditViol]      = useState<string[]>([])
+  const [editPos,       setEditPos]       = useState('')
+  const [editSatPm,     setEditSatPm]     = useState(false)
+  const [mobileView,    setMobileView]    = useState<'staff'|'day'>('staff')
   const [selectedStaff, setSelectedStaff] = useState<string>('')
+  const [isDraft,       setIsDraft]       = useState<boolean | null>(null)
+  const [draftPatterns,   setDraftPatterns]   = useState<string[]>([])
+  const [selectedPattern, setSelectedPattern] = useState<string>('')
+  const [viewingDraft,    setViewingDraft]    = useState(false)
+  const [showDraftModal,  setShowDraftModal]  = useState(false)
+  const [newPatternName,  setNewPatternName]  = useState('')
   const holidays = getHolidaySet()
 
   const fetchStaff = useCallback(async () => {
@@ -123,12 +128,12 @@ export default function ShiftPage() {
 
     const shiftList = Array.isArray(sdata.shifts) ? sdata.shifts : []
     setShifts(shiftList)
+    setSatPm(Array.isArray(sdata.saturday_pm) ? sdata.saturday_pm : [])
     if (shiftList.length > 0) {
       setIsDraft(shiftList.some((s: ShiftRow) => s.is_draft))
     } else {
       setIsDraft(null)
     }
-    setSatPm(Array.isArray(sdata.saturday_pm) ? sdata.saturday_pm : [])
 
     if (Array.isArray(rdata)) {
       setDayReqs(rdata.map((r: {year:number;month:number;day:number;staff_id:string;kubun:string}) => ({
@@ -139,8 +144,15 @@ export default function ShiftPage() {
     setLoading(false)
   }, [year, month])
 
-  useEffect(() => { fetchStaff() },  [fetchStaff])
-  useEffect(() => { fetchShifts() }, [fetchShifts])
+  const fetchDraftPatterns = useCallback(async () => {
+    const r    = await fetch(`/api/draft?year=${year}&month=${month}`)
+    const data = await r.json()
+    setDraftPatterns(Array.isArray(data) ? data : [])
+  }, [year, month])
+
+  useEffect(() => { fetchStaff() },         [fetchStaff])
+  useEffect(() => { fetchShifts() },         [fetchShifts])
+  useEffect(() => { fetchDraftPatterns() }, [fetchDraftPatterns])
 
   const daysInMonth = new Date(year, month, 0).getDate()
   const allDays = Array.from({ length: daysInMonth }, (_, i) => {
@@ -163,7 +175,7 @@ export default function ShiftPage() {
   }
 
   const satPmSet = new Set(satPm.map(r => `${r.date}-${r.staff_id}`))
-  const isSatPm = (date: string, sid: string) => satPmSet.has(`${date}-${sid}`)
+  const isSatPm  = (date: string, sid: string) => satPmSet.has(`${date}-${sid}`)
 
   const handleGenerate = async () => {
     if (!confirm(`${year}年${month}月のシフトを生成しますか？`)) return
@@ -188,7 +200,7 @@ export default function ShiftPage() {
     await fetchShifts()
   }
 
-    const handleConfirm = async () => {
+  const handleConfirm = async () => {
     if (!confirm(`${year}年${month}月のシフトを確定しますか？\n確定後も編集は可能ですが、再生成すると下書きに戻ります。`)) return
     await fetch('/api/confirm', {
       method: 'POST',
@@ -196,6 +208,58 @@ export default function ShiftPage() {
       body: JSON.stringify({ year, month }),
     })
     setIsDraft(false)
+  }
+
+  const handleGenerateAsDraft = async () => {
+    if (!newPatternName.trim()) return
+    setGenerating(true); setWarnings([]); setShowDraftModal(false)
+    const r = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year, month, pattern_name: newPatternName.trim() }),
+    })
+    const data = await r.json()
+    if (data.warnings?.length) setWarnings(data.warnings)
+    await fetchDraftPatterns()
+    setNewPatternName('')
+    setGenerating(false)
+  }
+
+  const handleLoadDraft = async (pattern_name: string) => {
+    setLoading(true)
+    const r    = await fetch(`/api/draft/load?year=${year}&month=${month}&pattern_name=${encodeURIComponent(pattern_name)}`)
+    const data = await r.json()
+    setShifts(Array.isArray(data) ? data : [])
+    setSelectedPattern(pattern_name)
+    setViewingDraft(true)
+    setLoading(false)
+  }
+
+  const handleBackToMain = async () => {
+    await fetchShifts()
+    setViewingDraft(false)
+    setSelectedPattern('')
+  }
+
+  const handleConfirmDraft = async (pattern_name: string) => {
+    if (!confirm(`「${pattern_name}」を本番シフトとして確定しますか？\n現在の本番シフトは上書きされます。`)) return
+    await fetch('/api/draft/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ year, month, pattern_name }),
+    })
+    await fetchShifts()
+    setViewingDraft(false)
+    setSelectedPattern('')
+    setIsDraft(false)
+    await fetchDraftPatterns()
+  }
+
+  const handleDeleteDraft = async (pattern_name: string) => {
+    if (!confirm(`「${pattern_name}」を削除しますか？`)) return
+    await fetch(`/api/draft?year=${year}&month=${month}&pattern_name=${encodeURIComponent(pattern_name)}`, { method: 'DELETE' })
+    if (selectedPattern === pattern_name) await handleBackToMain()
+    await fetchDraftPatterns()
   }
 
   const openEdit = (date: string, sid: string, pos: string, closed: boolean) => {
@@ -224,7 +288,6 @@ export default function ShiftPage() {
       s.date === editCell.date && s.staff_id === editCell.sid ? { ...s, position: editPos } : s
     ))
 
-    // 🌙（午後稼働）の更新
     if (editSatPm) {
       await fetch('/api/saturday_pm', {
         method: 'POST',
@@ -365,7 +428,6 @@ export default function ShiftPage() {
           className="bg-red-400 hover:bg-red-500 text-white px-4 py-1.5 rounded text-sm font-medium">
           🗑 シフトをリセット
         </button>
-        {/* ここに追加 */}
         {isDraft === true && (
           <button onClick={handleConfirm}
             className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-1.5 rounded text-sm font-medium">
@@ -382,6 +444,10 @@ export default function ShiftPage() {
             ✅ 確定済み
           </span>
         )}
+        <button onClick={() => setShowDraftModal(true)} disabled={generating}
+          className="bg-violet-500 hover:bg-violet-600 text-white px-4 py-1.5 rounded text-sm font-medium">
+          📋 下書き保存
+        </button>
         <button onClick={() => {
             if (isDraft) document.body.classList.add('is-draft')
             else document.body.classList.remove('is-draft')
@@ -391,6 +457,38 @@ export default function ShiftPage() {
           className="bg-slate-600 hover:bg-slate-700 text-white px-4 py-1.5 rounded text-sm font-medium">
           🖨 印刷／PDF保存
         </button>
+
+        {/* 下書きパターン一覧 */}
+        {draftPatterns.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap w-full">
+            <span className="text-xs text-slate-400">下書き：</span>
+            {draftPatterns.map(p => (
+              <div key={p} className="flex items-center gap-1">
+                <button onClick={() => handleLoadDraft(p)}
+                  className={`px-3 py-1 rounded text-xs font-medium border transition-colors
+                    ${selectedPattern === p
+                      ? 'bg-violet-500 text-white border-violet-500'
+                      : 'bg-white text-violet-600 border-violet-300 hover:bg-violet-50'}`}>
+                  {p}
+                </button>
+                <button onClick={() => handleConfirmDraft(p)}
+                  className="px-2 py-1 rounded text-xs bg-emerald-500 hover:bg-emerald-600 text-white">
+                  確定
+                </button>
+                <button onClick={() => handleDeleteDraft(p)}
+                  className="px-2 py-1 rounded text-xs bg-red-400 hover:bg-red-500 text-white">
+                  削除
+                </button>
+              </div>
+            ))}
+            {viewingDraft && (
+              <button onClick={handleBackToMain}
+                className="px-3 py-1 rounded text-xs bg-slate-500 hover:bg-slate-600 text-white">
+                ← 本番に戻る
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* スマホ用ヘッダ */}
@@ -421,6 +519,25 @@ export default function ShiftPage() {
           </button>
         </div>
       </div>
+
+      {/* 下書き表示中バナー */}
+      {viewingDraft && (
+        <div className="bg-violet-50 border border-violet-200 rounded-lg px-4 py-2 mb-3 flex items-center justify-between no-print">
+          <span className="text-sm text-violet-700 font-medium">
+            📋 下書き表示中：「{selectedPattern}」
+          </span>
+          <div className="flex gap-2">
+            <button onClick={() => handleConfirmDraft(selectedPattern)}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1 rounded text-xs font-medium">
+              ✅ これを確定する
+            </button>
+            <button onClick={handleBackToMain}
+              className="bg-slate-500 hover:bg-slate-600 text-white px-3 py-1 rounded text-xs font-medium">
+              ← 本番に戻る
+            </button>
+          </div>
+        </div>
+      )}
 
       {warnings.length > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-sm text-red-700">
@@ -557,7 +674,6 @@ export default function ShiftPage() {
                 <option key={p} value={p}>{POS_BADGE[p]}：{POS_LABEL[p]}</option>
               ))}
             </select>
-            {/* 土曜日のみ🌙チェックボックスを表示 */}
             {allDays.find(d => d.date === editCell.date)?.saturday && (
               <label className="flex items-center gap-2 mb-3 text-sm cursor-pointer">
                 <input
@@ -583,6 +699,38 @@ export default function ShiftPage() {
               <button onClick={handleSave}
                 className={`px-4 py-1.5 rounded-lg text-white text-sm ${editViol.length > 0 ? 'bg-orange-400 hover:bg-orange-500' : 'bg-blue-500 hover:bg-blue-600'}`}>
                 {editViol.length > 0 ? '⚠️ 強制保存' : '変更'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 下書き保存モーダル */}
+      {showDraftModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+          onClick={() => setShowDraftModal(false)}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-80" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-semibold text-slate-600 mb-1">下書きとして保存</h3>
+            <p className="text-xs text-slate-400 mb-3">
+              シフトを生成してパターン名をつけて保存します。<br />
+              複数パターンを保存して比較できます。
+            </p>
+            <input
+              type="text"
+              value={newPatternName}
+              onChange={e => setNewPatternName(e.target.value)}
+              placeholder="例：6月案A"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3"
+              onKeyDown={e => e.key === 'Enter' && handleGenerateAsDraft()}
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowDraftModal(false)}
+                className="px-4 py-1.5 rounded-lg border text-sm hover:bg-slate-50">
+                キャンセル
+              </button>
+              <button onClick={handleGenerateAsDraft} disabled={!newPatternName.trim()}
+                className="px-4 py-1.5 rounded-lg bg-violet-500 hover:bg-violet-600 text-white text-sm disabled:opacity-50">
+                生成して保存
               </button>
             </div>
           </div>

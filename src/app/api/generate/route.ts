@@ -6,7 +6,7 @@ import { getHolidaySet } from '@/lib/holidays'
 export const dynamic = 'force-dynamic'
 
 export async function POST(req: NextRequest) {
-  const { year, month } = await req.json()
+  const { year, month, pattern_name } = await req.json()
 
   const [staffRes, reqRes, satRes] = await Promise.all([
     supabase.from('staff').select('*').order('sort_order'),
@@ -66,6 +66,17 @@ export async function POST(req: NextRequest) {
   if (pmRows.length > 0) {
     await supabase.from('saturday_pm').delete().gte('date', firstDay).lte('date', lastDay)
     await supabase.from('saturday_pm').insert(pmRows)
+  }
+  // パターン名が指定されていれば下書きとしても保存
+  if (pattern_name) {
+    const draftRows = result.flatMap(day =>
+      Object.entries(day.assignments).map(([staff_id, position]) => ({
+        year, month, pattern_name, date: day.date, staff_id, position,
+      }))
+    )
+    await supabase.from('shifts_draft').delete()
+      .eq('year', year).eq('month', month).eq('pattern_name', pattern_name)
+    await supabase.from('shifts_draft').insert(draftRows)
   }
 
   return NextResponse.json({ ok: true, warnings, days: result.length })
