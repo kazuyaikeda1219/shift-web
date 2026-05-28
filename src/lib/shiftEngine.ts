@@ -418,18 +418,26 @@ export function generateMonth(
           if (isHeavy) heavyECount[sid] = (heavyECount[sid] ?? 0) + 1
         }
 
-        // ★なしはsort_order順にe①②③④を付与
-        const nonUsSorted = nonUsInE.sort((a, b) => {
-          const oa = staffList.find(s => s.id === a)?.sort_order ?? 99
-          const ob = staffList.find(s => s.id === b)?.sort_order ?? 99
-          return oa - ob
-        })
-        // e系のスロット：累計回数が少ないスロットから割り当て
+        // ★なしはe①〜e④をスロット累計回数で均等化して割り当て
         const eSmallSlots = ['e1','e2','e3','e4'] as const
-        const shuffledSmall = [...eSmallSlots.slice(0, nonUsSorted.length)].sort(() => Math.random() - 0.5)
-        for (let i = 0; i < nonUsSorted.length; i++) {
-          const sid  = nonUsSorted[i]
-          const slot = shuffledSmall[i] as Position
+        const availableSlots = [...eSmallSlots.slice(0, nonUsInE.length)]
+
+        // 人とスロットをそれぞれ累計回数でソートして対応付け
+        const nonUsSortedByCount = [...nonUsInE].sort((a, b) => {
+          const aTotal = (['e1','e2','e3','e4'] as const).reduce((sum, k) => sum + (posCount[a]?.[k] ?? 0), 0)
+          const bTotal = (['e1','e2','e3','e4'] as const).reduce((sum, k) => sum + (posCount[b]?.[k] ?? 0), 0)
+          if (aTotal !== bTotal) return aTotal - bTotal
+          return Math.random() - 0.5
+        })
+        const slotsSortedByCount = availableSlots.sort((a, b) => {
+          const aTotal = staffIds.reduce((sum, sid) => sum + (posCount[sid]?.[a] ?? 0), 0)
+          const bTotal = staffIds.reduce((sum, sid) => sum + (posCount[sid]?.[b] ?? 0), 0)
+          return aTotal - bTotal
+        })
+
+        for (let i = 0; i < nonUsSortedByCount.length; i++) {
+          const sid  = nonUsSortedByCount[i]
+          const slot = slotsSortedByCount[i] as Position
           assignment[sid] = slot
           assigned.add(sid)
           posCount[sid][slot] = (posCount[sid][slot] ?? 0) + 1
