@@ -721,7 +721,11 @@ export default function ShiftPage() {
               onChange={e => setNewPatternName(e.target.value)}
               placeholder="例：6月案A"
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3"
-              onKeyDown={e => e.key === 'Enter' && handleGenerateAsDraft()}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                  handleGenerateAsDraft()
+                }
+              }}
             />
             <div className="flex gap-2 justify-end">
               <button onClick={() => setShowDraftModal(false)}
