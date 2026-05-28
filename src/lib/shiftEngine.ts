@@ -284,6 +284,13 @@ export function generateMonth(
       const US_AB_MAX = 1
       for (const pos of ['A', 'B', 'C', 'D']) {
         let cands = available.filter(s => !assigned.has(s) && !blocked(s, false, pos, halfAm, halfPm))
+        // E①用に★を最低1名残す
+        const usRemaining = available.filter(s =>
+          usStaff.has(s) && !assigned.has(s) && !halfAm.has(s) && !halfPm.has(s)
+        )
+        if (usRemaining.length <= 1 && cands.some(s => usStaff.has(s))) {
+          cands = cands.filter(s => !usStaff.has(s))
+        }
         if (pos === 'A' || pos === 'B') {
           // ★がAまたはBにすでに1名いる場合、もう一方にも★を入れない
           const usInA = Object.entries(assignment).some(([sid, p]) => p === 'A' && usStaff.has(sid))
