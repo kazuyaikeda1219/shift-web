@@ -198,85 +198,10 @@ export function generateMonth(
     const assigned = new Set<StaffId>()
     const saturdayPm: StaffId[] = []
 
-    if (isSat) {
-      // ── 土曜（偶数週）のロジック ──
-      const satEntry = satMap[dateStr]
-
-      // A担当（午後まで・★のみ）
-      let aPerson: StaffId | null = null
-      if (satEntry?.a_staff_id && available.includes(satEntry.a_staff_id)) {
-        aPerson = satEntry.a_staff_id
-      } else {
-        const aCands = available.filter(s => usStaff.has(s) && !assigned.has(s))
-        aPerson = pickOne(aCands, assigned, prevPos, posCount, heavyECount, false, false, 'A')
-      }
-      if (aPerson) {
-        assignment[aPerson] = 'A'
-        assigned.add(aPerson)
-        posCount[aPerson]['A'] = (posCount[aPerson]['A'] ?? 0) + 1
-        prevPos[aPerson] = 'A'
-        saturdayPm.push(aPerson)
-      }
-
-      // E①担当（午後まで・★のみ）
-      let e1Person: StaffId | null = null
-      if (satEntry?.e1_staff_id && available.includes(satEntry.e1_staff_id) && !assigned.has(satEntry.e1_staff_id)) {
-        e1Person = satEntry.e1_staff_id
-      } else {
-        const e1Cands = available.filter(s => usStaff.has(s) && !assigned.has(s))
-        const e1Sorted = [...e1Cands].sort((a, b) => {
-          const diff = (e1Count[a] ?? 0) - (e1Count[b] ?? 0)
-          if (diff !== 0) return diff
-          return Math.random() - 0.5
-        })
-        e1Person = e1Sorted[0] ?? null
-      }
-      if (e1Person) {
-        assignment[e1Person] = 'E1'
-        assigned.add(e1Person)
-        posCount[e1Person]['E1'] = (posCount[e1Person]['E1'] ?? 0) + 1
-        e1Count[e1Person] = (e1Count[e1Person] ?? 0) + 1
-        prevPos[e1Person] = 'E1'
-        saturdayPm.push(e1Person)
-      }
-
-      // E②（★のみ・午前のみ）
-      const e2Cands = available.filter(s => usStaff.has(s) && !assigned.has(s))
-      const e2Person = pickOne(e2Cands, assigned, prevPos, posCount, heavyECount, false, true, 'E2')
-      if (e2Person) {
-        assignment[e2Person] = 'E2'
-        assigned.add(e2Person)
-        posCount[e2Person]['E2'] = (posCount[e2Person]['E2'] ?? 0) + 1
-        prevPos[e2Person] = 'E2'
-      }
-
-      // B・C（誰でも可）
-      for (const pos of ['B', 'C']) {
-        const cands = available.filter(s => !assigned.has(s))
-        const picked = pickOne(cands, assigned, prevPos, posCount, heavyECount, false, false, pos)
-        if (picked) {
-          assignment[picked] = pos as Position
-          assigned.add(picked)
-          posCount[picked][pos] = (posCount[picked][pos] ?? 0) + 1
-          prevPos[picked] = pos
-        }
-      }
-
-      // 残りはe①②③④（★なし・sort_order順）
-      const satNonUs = available.filter(sid => !assignment[sid])
-        .sort((a, b) => {
-          const oa = staffList.find(s => s.id === a)?.sort_order ?? 99
-          const ob = staffList.find(s => s.id === b)?.sort_order ?? 99
-          return oa - ob
-        })
-      const eSmallSlotsSat = ['e1','e2','e3','e4'] as const
-      const shuffledSat = [...eSmallSlotsSat.slice(0, satNonUs.length)].sort(() => Math.random() - 0.5)
-      for (let i = 0; i < satNonUs.length; i++) {
-        const sid  = satNonUs[i]
-        const slot = shuffledSat[i] as Position
-        assignment[sid] = slot
-        posCount[sid][slot] = (posCount[sid][slot] ?? 0) + 1
-        prevPos[sid] = slot
+if (isSat) {
+      // ── 土曜（偶数週）：手動入力のため自動アサインしない ──
+      for (const sid of available) {
+        assignment[sid] = '－'
       }
 
     } else {
