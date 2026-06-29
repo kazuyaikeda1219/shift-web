@@ -3,7 +3,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'シフト管理システム',
-  description: '検査室・栄養科シフト管理システム',
+  description: '検査室・栄養科・看護師シフト管理システム',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -15,6 +15,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <a href="/"          className="text-sm text-slate-500 hover:text-blue-600">シフト表</a>
           <a href="/register"  className="text-sm text-slate-500 hover:text-blue-600">休み申請</a>
           <a href="/eiyoka"    className="text-sm text-slate-500 hover:text-blue-600">栄養科</a>
+          <a href="/nurse"     className="text-sm text-slate-500 hover:text-blue-600">看護師</a>
+          <a href="/radiation" className="text-sm text-slate-500 hover:text-blue-600">放射線室</a>
         </nav>
         <main className="p-6">{children}</main>
       </body>
