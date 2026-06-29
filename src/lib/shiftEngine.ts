@@ -11,6 +11,7 @@ export interface Staff {
   id: StaffId
   name: string
   can_us: boolean
+  is_star?: boolean   // 水曜A禁止対象の★（US担当のうち松井を除く3名）
   sort_order: number
 }
 
@@ -133,6 +134,7 @@ export function generateMonth(
   const sortedStaff = [...staffList].sort((a, b) => a.sort_order - b.sort_order)
   const staffIds    = sortedStaff.map(s => s.id)
   const usStaff     = new Set(staffList.filter(s => s.can_us).map(s => s.id))
+  const starStaff   = new Set(staffList.filter(s => s.is_star).map(s => s.id))
 
   const reqMap: Record<string, Record<StaffId, string>> = {}
   for (const r of requests) {
@@ -187,8 +189,11 @@ export function generateMonth(
     const restIds  = new Set(Object.entries(dayReq).filter(([,k]) => k === '全休').map(([s]) => s))
     const halfAm   = new Set(Object.entries(dayReq).filter(([,k]) => k === '午前半休').map(([s]) => s))
     const halfPm   = new Set(Object.entries(dayReq).filter(([,k]) => k === '午後半休').map(([s]) => s))
-    const available = staffIds.filter(sid => !restIds.has(sid))
-    const restCount = restIds.size
+    // 全休・半休いずれもローテーション対象外にする。
+    // 半休者はセルに「午前半休／午後半休」を表示して休み申請を反映する。
+    const offIds    = new Set<StaffId>([...restIds, ...halfAm, ...halfPm])
+    const available = staffIds.filter(sid => !offIds.has(sid))
+    const restCount = offIds.size
 
     const assignment: Record<StaffId, Position> = {}
     for (const sid of restIds) assignment[sid] = '全休'
@@ -221,6 +226,10 @@ if (isSat) {
           const usInA = Object.entries(assignment).some(([sid, p]) => p === 'A' && usStaff.has(sid))
           const usInB = Object.entries(assignment).some(([sid, p]) => p === 'B' && usStaff.has(sid))
           if (usInA || usInB) cands = cands.filter(s => !usStaff.has(s))
+        }
+        // 水曜は★（is_star＝3名）をAに入れない
+        if (pos === 'A' && wd === '水') {
+          cands = cands.filter(s => !starStaff.has(s))
         }
         // 月・水は★をDに入れない
         if (pos === 'D' && (wd === '月' || wd === '水')) {

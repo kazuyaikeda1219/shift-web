@@ -7,21 +7,27 @@
 create table if not exists staff (
   id        text primary key,        -- S1〜S8
   name      text not null,
-  can_us    boolean not null default false,
+  can_us    boolean not null default false,  -- US担当可（E①〜④に入れる4名）
+  is_star   boolean not null default false,  -- ★：水曜にA禁止の対象（US担当のうち松井を除く3名）
   sort_order integer not null default 0
 );
 
 -- 初期データ（名前は実際のものに変更してください）
-insert into staff (id, name, can_us, sort_order) values
-  ('S1', '土橋', true,  1),
-  ('S2', '竹下', true,  2),
-  ('S3', '井上', true,  3),
-  ('S4', '松井', true,  4),
-  ('S5', '田中', false, 5),
-  ('S6', '大坪', false, 6),
-  ('S7', '塚原', false, 7),
-  ('S8', '井手', false, 8)
+insert into staff (id, name, can_us, is_star, sort_order) values
+  ('S1', '土橋', true,  true,  1),
+  ('S2', '竹下', true,  true,  2),
+  ('S3', '井上', true,  true,  3),
+  ('S4', '松井', true,  false, 4),
+  ('S5', '田中', false, false, 5),
+  ('S6', '大坪', false, false, 6),
+  ('S7', '塚原', false, false, 7),
+  ('S8', '井手', false, false, 8)
 on conflict (id) do nothing;
+
+-- 既存テーブルへの追加マイグレーション（すでに staff がある場合はこちらを実行）
+alter table staff add column if not exists is_star boolean not null default false;
+update staff set is_star = true  where id in ('S1','S2','S3');  -- 土橋・竹下・井上
+update staff set is_star = false where id = 'S4';               -- 松井は対象外
 
 -- 休み申請
 create table if not exists requests (

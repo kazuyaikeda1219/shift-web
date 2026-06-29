@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { isClosed } from '@/lib/shiftEngine'
 import { getHolidaySet } from '@/lib/holidays'
 
-type Staff = { id: string; name: string; can_us: boolean; sort_order: number }
+type Staff = { id: string; name: string; can_us: boolean; is_star?: boolean; sort_order: number }
 type ShiftRow = { date: string; staff_id: string; position: string; is_draft: boolean }
 type RequestRow = { date: string; staff_id: string; kubun: string }
 type SatPmRow = { date: string; staff_id: string }
@@ -73,6 +73,12 @@ function checkViolations(
   const usInA = Object.entries(proposed).some(([sid, p]) => p === 'A' && usStaff.has(sid))
   const usInB = Object.entries(proposed).some(([sid, p]) => p === 'B' && usStaff.has(sid))
   if (usInA && usInB) violations.push('★（US担当者）がAとBの両方に配置されています')
+
+  // 水曜は★（is_star＝3名）をAに配置できない
+  const starStaff = new Set(staff.filter(s => s.is_star).map(s => s.id))
+  const wd = new Date(date + 'T00:00:00Z').getUTCDay()  // 3 = 水曜
+  if (newPos === 'A' && wd === 3 && starStaff.has(targetSid))
+    violations.push('水曜日は★（3名）をA（血液検査）に配置できません')
 
   const kubun = kubunOf(targetSid)
   const name  = staffMap[targetSid]?.name ?? targetSid
